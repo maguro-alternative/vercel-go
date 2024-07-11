@@ -176,6 +176,51 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	case http.MethodPut:
+		var hairLengthTypesJson HairLengthTypesJson
+		query := `
+			UPDATE
+				hairlength_type
+			SET
+				length = :length
+			WHERE
+				id = :id
+		`
+		// json読み込み
+		err := json.NewDecoder(r.Body).Decode(&hairLengthTypesJson)
+		if err != nil {
+			log.Printf(fmt.Sprintf("json decode error: %v body:%v", err, r.Body))
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		// jsonバリデーション
+		err = hairLengthTypesJson.Validate()
+		if err != nil {
+			log.Printf(fmt.Sprintf("json validate error: %v", err))
+			http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+			return
+		}
+		for _, hairLengthType := range hairLengthTypesJson.HairLengthTypes {
+			// jsonバリデーション
+			err = hairLengthType.Validate()
+			if err != nil {
+				log.Printf(fmt.Sprintf("json validate error: %v", err))
+				http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+				return
+			}
+			_, err = db.NamedExecContext(r.Context(), query, hairLengthType)
+			if err != nil {
+				log.Printf(fmt.Sprintf("db error: %v", err))
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
+		// json書き込み
+		err = json.NewEncoder(w).Encode(&hairLengthTypesJson)
+		if err != nil {
+			log.Printf(fmt.Sprintf("json encode error: %v", err))
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	case http.MethodDelete:
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
