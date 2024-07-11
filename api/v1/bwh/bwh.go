@@ -225,7 +225,19 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			log.Println(fmt.Sprintf("json unmarshal error: %v", err))
 			http.Error(w, err.Error(), http.StatusUnprocessableEntity)
 		}
+		// jsonバリデーション
+		err = bwhsJson.Validate()
+		if err != nil {
+			log.Println(fmt.Sprintf("validation error: %v", err))
+			http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+		}
 		for _, bwh := range bwhsJson.BWHs {
+			// jsonバリデーション
+			err = bwh.Validate()
+			if err != nil {
+				log.Println(fmt.Sprintf("validation error: %v", err))
+				http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+			}
 			_, err = db.NamedExecContext(r.Context(), query, bwh)
 			if err != nil {
 				log.Println(fmt.Sprintf("update error: %v", err))
