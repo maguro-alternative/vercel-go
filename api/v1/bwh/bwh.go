@@ -176,6 +176,12 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			log.Println(fmt.Sprintf("json unmarshal error: %v", err))
 			http.Error(w, err.Error(), http.StatusBadRequest)
 		}
+		// jsonバリデーション
+		err = bwhsJson.Validate()
+		if err != nil {
+			log.Println(fmt.Sprintf("validation error: %v", err))
+			http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+		}
 		if len(bwhsJson.BWHs) == 0 {
 			log.Println("json unexpected error: empty body")
 			http.Error(w, "json unexpected error: empty body", http.StatusBadRequest)
