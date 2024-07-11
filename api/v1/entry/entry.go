@@ -177,6 +177,48 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	case http.MethodPut:
+		var entriesJson EntriesJson
+		query := `
+			UPDATE
+				entry
+			SET
+				source_id = :source_id,
+				name = :name,
+				image = :image,
+				content = :content,
+				created_at = :created_at
+			WHERE
+				id = :id
+		`
+		// リクエストボディを読み込む
+		jsonBytes, err := io.ReadAll(r.Body)
+		if err != nil {
+			log.Println(fmt.Sprintf("read error: %v", err))
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		}
+		err = json.Unmarshal(jsonBytes, &entriesJson)
+		if err != nil {
+			log.Println(fmt.Sprintf("json decode error: %v body:%v", err, r.Body))
+			http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+		}
+		if len(entriesJson.Entries) == 0 {
+			log.Println("json unexpected error: empty body")
+			http.Error(w, "json unexpected error: empty body", http.StatusUnprocessableEntity)
+		}
+		for _, entry := range entriesJson.Entries {
+			// 更新
+			_, err = db.NamedExecContext(r.Context(), query, entry)
+			if err != nil {
+				log.Println(fmt.Sprintf("update error: %v", err))
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+		}
+		// レスポンスボディに書き込む
+		err = json.NewEncoder(w).Encode(&entriesJson)
+		if err != nil {
+			log.Println(fmt.Sprintf("json encode error: %v", err))
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 	case http.MethodDelete:
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
