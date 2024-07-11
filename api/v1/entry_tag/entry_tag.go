@@ -61,6 +61,12 @@ type IDs struct {
 	IDs []int64 `json:"ids"`
 }
 
+func (i *IDs) Validate() error {
+	return validation.ValidateStruct(i,
+		validation.Field(&i.IDs, validation.Required),
+	)
+}
+
 func Handler(w http.ResponseWriter, r *http.Request) {
 	db, err := sqlx.Open("postgres", "")
 	if err != nil {
@@ -241,6 +247,70 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	case http.MethodDelete:
+		var delIDs IDs
+		query := `
+			DELETE FROM
+				entry_tag
+			WHERE
+				id IN (?)
+		`
+		jsonBytes, err := io.ReadAll(r.Body)
+		if err != nil {
+			log.Println(fmt.Sprintf("read error: %v", err))
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		}
+		err = json.Unmarshal(jsonBytes, &delIDs)
+		if err != nil {
+			log.Println(fmt.Sprintf("json unmarshal error: %v", err))
+			http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+		}
+		// jsonバリデーション
+		err = delIDs.Validate()
+		if err != nil {
+			log.Println(fmt.Sprintf("validation error: %v", err))
+			http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+		}
+		if len(delIDs.IDs) == 0 {
+			return
+		} else if len(delIDs.IDs) == 1 {
+			query = `
+				DELETE FROM
+					entry_tag
+				WHERE
+					id = $1
+			`
+			_, err = db.ExecContext(r.Context(), query, delIDs.IDs[0])
+			if err != nil {
+				log.Println(fmt.Sprintf("delete error: %v", err))
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			// json返却
+			err = json.NewEncoder(w).Encode(&delIDs)
+			if err != nil {
+				log.Println(fmt.Sprintf("json encode error: %v", err))
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			return
+		}
+		// idの数だけ置換文字を作成
+		query, args, err := sqlx.In(query, delIDs.IDs)
+		if err != nil {
+			log.Println(fmt.Sprintf("db.In error: %v", err))
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		// Postgresの場合は置換文字を$1, $2, ...とする必要がある
+		query = sqlx.Rebind(len(delIDs.IDs),query)
+		_, err = db.ExecContext(r.Context(), query, args...)
+		if err != nil {
+			log.Println(fmt.Sprintf("delete error: %v", err))
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		// json返却
+		err = json.NewEncoder(w).Encode(&delIDs)
+		if err != nil {
+			log.Println(fmt.Sprintf("json encode error: %v", err))
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
