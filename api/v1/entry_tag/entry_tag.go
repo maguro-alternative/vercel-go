@@ -195,6 +195,51 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	case http.MethodPut:
+		var entryTagsJson EntryTagsJson
+		query := `
+			UPDATE
+				entry_tag
+			SET
+				entry_id = :entry_id,
+				tag_id = :tag_id
+			WHERE
+				id = :id
+		`
+		jsonBytes, err := io.ReadAll(r.Body)
+		if err != nil {
+			log.Println(fmt.Sprintf("read error: %v", err))
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		}
+		err = json.Unmarshal(jsonBytes, &entryTagsJson)
+		if err != nil {
+			log.Println(fmt.Sprintf("json unmarshal error: %v", err))
+			http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+		}
+		// jsonバリデーション
+		err = entryTagsJson.Validate()
+		if err != nil {
+			log.Println(fmt.Sprintf("validation error: %v", err))
+			http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+		}
+		for _, entryTag := range entryTagsJson.EntryTags {
+			// jsonバリデーション
+			err = entryTag.Validate()
+			if err != nil {
+				log.Println(fmt.Sprintf("validation error: %v", err))
+				http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+			}
+			_, err := db.NamedExecContext(r.Context(), query, entryTag)
+			if err != nil {
+				log.Println(fmt.Sprintf("update error: %v", err))
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+		}
+		// json返却
+		err = json.NewEncoder(w).Encode(&entryTagsJson)
+		if err != nil {
+			log.Println(fmt.Sprintf("json encode error: %v", err))
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 	case http.MethodDelete:
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
