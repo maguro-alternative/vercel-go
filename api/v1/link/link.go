@@ -194,6 +194,50 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	case http.MethodPut:
+		var linksJson LinksJson
+		query := `
+			UPDATE
+				link
+			SET
+				entry_id = :entry_id,
+				type = :type,
+				url = :url,
+				nsfw = :nsfw,
+				darkness = :darkness
+			WHERE
+				id = :id
+		`
+		// リクエストボディをJSONに変換
+		err := json.NewDecoder(r.Body).Decode(&linksJson)
+		if err != nil {
+			log.Printf(fmt.Sprintf("json decode error: %v body:%v", err, r.Body))
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		}
+		// JSONのバリデーション
+		err = linksJson.Validate()
+		if err != nil {
+			log.Printf(fmt.Sprintf("validation error: %v", err))
+			http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+		}
+		for _, link := range linksJson.Links {
+			// リンクのバリデーション
+			err = link.Validate()
+			if err != nil {
+				log.Printf(fmt.Sprintf("validation error: %v", err))
+				http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+			}
+			_, err = db.NamedExecContext(r.Context(), query, link)
+			if err != nil {
+				log.Printf(fmt.Sprintf("update error: %v", err))
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+		}
+		// レスポンスボディをJSONに変換
+		err = json.NewEncoder(w).Encode(&linksJson)
+		if err != nil {
+			log.Printf(fmt.Sprintf("json encode error: %v", err))
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 	case http.MethodDelete:
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
