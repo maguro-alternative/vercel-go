@@ -1,7 +1,12 @@
 {
     "build": {
-        "env": {
-            "GO_BUILD_FLAGS": "-ldflags '-s -w'"
-        }
+    "env": {
+        "GO_BUILD_FLAGS": "-ldflags '-s -w'"
     }
+    },
+    "rewrites": [
+        { "source": "/api", "destination": "/api" },
+        { "source": "/api/bwh", "destination": "/api/bwh" },
+        { "source": "/api/entry", "destination": "/api/entry" }
+    ]
 }
