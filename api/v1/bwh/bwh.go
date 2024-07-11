@@ -269,6 +269,12 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			log.Println(fmt.Sprintf("json unmarshal error: %v", err))
 			http.Error(w, err.Error(), http.StatusBadRequest)
 		}
+		// jsonバリデーション
+		err = delIDs.Validate()
+		if err != nil {
+			log.Println(fmt.Sprintf("validation error: %v", err))
+			http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+		}
 		// idが0の場合は何もしない
 		if len(delIDs.IDs) == 0 {
 			return
