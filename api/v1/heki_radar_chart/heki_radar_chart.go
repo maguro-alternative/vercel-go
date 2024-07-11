@@ -53,6 +53,89 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	defer db.Close()
 	switch r.Method {
 	case http.MethodGet:
+		var hekiRadarChartsJson HekiRadarChartsJson
+		query := `
+			SELECT
+				entry_id,
+				ai,
+				nu
+			FROM
+				heki_radar_chart
+			WHERE
+				entry_id IN (?)
+		`
+		queryIDs, ok := r.URL.Query()["entry_id"]
+		if !ok {
+			query = `
+				SELECT
+					entry_id,
+					ai,
+					nu
+				FROM
+					heki_radar_chart
+			`
+			err := db.SelectContext(r.Context(), &hekiRadarChartsJson.HekiRadarCharts, query)
+			if err != nil {
+				log.Println(fmt.Sprintf("db error: %v", err))
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			// json書き込み
+			err = json.NewEncoder(w).Encode(&hekiRadarChartsJson)
+			if err != nil {
+				log.Println(fmt.Sprintf("json encode error: %v", err))
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			return
+		} else if len(queryIDs) == 1 {
+			query = `
+				SELECT
+					entry_id,
+					ai,
+					nu
+				FROM
+					heki_radar_chart
+				WHERE
+					entry_id = $1
+			`
+			err := db.SelectContext(r.Context(), &hekiRadarChartsJson.HekiRadarCharts, query, queryIDs[0])
+			if err != nil {
+				log.Println(fmt.Sprintf("db error: %v", err))
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			// json書き込み
+			err = json.NewEncoder(w).Encode(&hekiRadarChartsJson)
+			if err != nil {
+				log.Println(fmt.Sprintf("json encode error: %v", err))
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			return
+		}
+		// idの数だけ置換文字を作成
+		query, args, err := sqlx.In(query, queryIDs)
+		if err != nil {
+			log.Println(fmt.Sprintf("db error: %v", err))
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		// Postgresの場合は置換文字を$1, $2, ...とする必要がある
+		query = sqlx.Rebind(len(queryIDs), query)
+		err = db.SelectContext(r.Context(), &hekiRadarChartsJson.HekiRadarCharts, query, args...)
+		if err != nil {
+			log.Println(fmt.Sprintf("db error: %v", err))
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		// json書き込み
+		err = json.NewEncoder(w).Encode(&hekiRadarChartsJson)
+		if err != nil {
+			log.Println(fmt.Sprintf("json encode error: %v", err))
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	case http.MethodPost:
 		var HekiRadarChartsJson HekiRadarChartsJson
 		query := `
