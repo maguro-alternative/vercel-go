@@ -231,6 +231,72 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	case http.MethodDelete:
+		var delIDs IDs
+		query := `
+			DELETE FROM
+				heki_radar_chart
+			WHERE
+				entry_id IN (?)
+		`
+		err := json.NewDecoder(r.Body).Decode(&delIDs)
+		if err != nil {
+			log.Println(fmt.Sprintf("json decode error: %v body:%v", err, r.Body))
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		// jsonバリデーション
+		err = delIDs.Validate()
+		if err != nil {
+			log.Println(fmt.Sprintf("json validate error: %v", err))
+			http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+			return
+		}
+		if len(delIDs.IDs) == 0 {
+			return
+		} else if len(delIDs.IDs) == 1 {
+			query = `
+				DELETE FROM
+					heki_radar_chart
+				WHERE
+					entry_id = $1
+			`
+			_, err := db.ExecContext(r.Context(), query, delIDs.IDs[0])
+			if err != nil {
+				log.Println(fmt.Sprintf("db error: %v", err))
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			// json書き込み
+			err = json.NewEncoder(w).Encode(&delIDs)
+			if err != nil {
+				log.Println(fmt.Sprintf("json encode error: %v", err))
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			return
+		}
+		// idの数だけ置換文字を作成
+		query, args, err := sqlx.In(query, delIDs.IDs)
+		if err != nil {
+			log.Println(fmt.Sprintf("db error: %v", err))
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		// Postgresの場合は置換文字を$1, $2, ...とする必要がある
+		query = sqlx.Rebind(len(delIDs.IDs), query)
+		_, err = db.ExecContext(r.Context(), query, args...)
+		if err != nil {
+			log.Println(fmt.Sprintf("db error: %v", err))
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		// json書き込み
+		err = json.NewEncoder(w).Encode(&delIDs)
+		if err != nil {
+			log.Println(fmt.Sprintf("json encode error: %v", err))
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
