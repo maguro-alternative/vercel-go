@@ -176,6 +176,50 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	case http.MethodPut:
+		var hairColorTypesJson HairColorTypesJson
+		query := `
+			UPDATE
+				haircolor_type
+			SET
+				color = :color
+			WHERE
+				id = :id
+		`
+		// jsonのデコード
+		err := json.NewDecoder(r.Body).Decode(&hairColorTypesJson)
+		if err != nil {
+			log.Printf(fmt.Sprintf("json decode error: %v body:%v", err, r.Body))
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		// jsonバリデーション
+		err = hairColorTypesJson.Validate()
+		if err != nil {
+			log.Printf(fmt.Sprintf("validation error: %v", err))
+			http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+			return
+		}
+		for _, hairColorType := range hairColorTypesJson.HairColorTypes {
+			// jsonのバリデーションを通過したデータをDBに登録
+			err = hairColorType.Validate()
+			if err != nil {
+				log.Printf(fmt.Sprintf("validation error: %v", err))
+				http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+				return
+			}
+			_, err = db.NamedExecContext(r.Context(), query, hairColorType)
+			if err != nil {
+				log.Printf(fmt.Sprintf("db error: %v", err))
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
+		err = json.NewEncoder(w).Encode(&hairColorTypesJson)
+		if err != nil {
+			log.Printf(fmt.Sprintf("json encode error: %v", err))
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	case http.MethodDelete:
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
