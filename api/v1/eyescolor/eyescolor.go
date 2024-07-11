@@ -178,6 +178,55 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	case http.MethodPut:
+		var eyeColorsJson EyeColorsJson
+		query := `
+			UPDATE
+				eyecolor
+			SET
+				color_id = :color_id
+			WHERE
+				entry_id = :entry_id
+		`
+		jsonBytes, err := io.ReadAll(r.Body)
+		if err != nil {
+			log.Println(fmt.Sprintf("read error: %v", err))
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		}
+		err = json.Unmarshal(jsonBytes, &eyeColorsJson)
+		if err != nil {
+			log.Printf(fmt.Sprintf("json decode error: %v body:%v", err, r.Body))
+			http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+			return
+		}
+		// jsonバリデーション
+		err = eyeColorsJson.Validate()
+		if err != nil {
+			log.Printf(fmt.Sprintf("validation error: %v", err))
+			http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+			return
+		}
+		for _, eyeColor := range eyeColorsJson.EyeColors {
+			// jsonバリデーション
+			err = eyeColor.Validate()
+			if err != nil {
+				log.Printf(fmt.Sprintf("validation error: %v", err))
+				http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+				return
+			}
+			_, err = db.NamedExecContext(r.Context(), query, eyeColor)
+			if err != nil {
+				log.Printf(fmt.Sprintf("db error: %v", err))
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
+		// json返却
+		err = json.NewEncoder(w).Encode(&eyeColorsJson)
+		if err != nil {
+			log.Printf(fmt.Sprintf("json encode error: %v", err))
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	case http.MethodDelete:
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
