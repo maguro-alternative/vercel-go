@@ -51,6 +51,79 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	defer db.Close()
 	switch r.Method {
 	case http.MethodGet:
+		var hairLengthsJson HairLengthsJson
+		query := `
+			SELECT
+				entry_id,
+				hairlength_type_id
+			FROM
+				hairlength
+			WHERE
+				entry_id IN (?)
+		`
+		queryIDs, ok := r.URL.Query()["entry_id"]
+		if !ok {
+			query = `
+				SELECT
+					entry_id,
+					hairlength_type_id
+				FROM
+					hairlength
+			`
+			err := db.SelectContext(r.Context(), &hairLengthsJson.HairLengths, query)
+			if err != nil {
+				log.Printf(fmt.Sprintf("db error: %v", err))
+				http.Error(w, "db error", http.StatusInternalServerError)
+			}
+			// jsonを返す
+			err = json.NewEncoder(w).Encode(&hairLengthsJson)
+			if err != nil {
+				log.Printf(fmt.Sprintf("json encode error: %v", err))
+				http.Error(w, "json encode error", http.StatusInternalServerError)
+			}
+			return
+		} else if len(queryIDs) == 1 {
+			query = `
+				SELECT
+					entry_id,
+					hairlength_type_id
+				FROM
+					hairlength
+				WHERE
+					entry_id = $1
+			`
+			err := db.SelectContext(r.Context(), &hairLengthsJson.HairLengths, query, queryIDs[0])
+			if err != nil {
+				log.Printf(fmt.Sprintf("db error: %v", err))
+				http.Error(w, "db error", http.StatusInternalServerError)
+			}
+			// jsonを返す
+			err = json.NewEncoder(w).Encode(&hairLengthsJson)
+			if err != nil {
+				log.Printf(fmt.Sprintf("json encode error: %v", err))
+				http.Error(w, "json encode error", http.StatusInternalServerError)
+			}
+			return
+		}
+		// idの数だけ置換文字を作成
+		query, args, err := sqlx.In(query, queryIDs)
+		if err != nil {
+			log.Printf(fmt.Sprintf("db error: %v", err))
+			http.Error(w, "db error", http.StatusInternalServerError)
+		}
+		// Postgresの場合は置換文字を$1, $2, ...とする必要がある
+		query = sqlx.Rebind(len(queryIDs), query)
+		err = db.SelectContext(r.Context(), &hairLengthsJson.HairLengths, query, args...)
+		if err != nil {
+			log.Printf(fmt.Sprintf("db error: %v", err))
+			http.Error(w, "db error", http.StatusInternalServerError)
+		}
+		// jsonを返す
+		err = json.NewEncoder(w).Encode(&hairLengthsJson)
+		if err != nil {
+			log.Printf(fmt.Sprintf("json encode error: %v", err))
+			http.Error(w, "json encode error", http.StatusInternalServerError)
+		}
 	case http.MethodPost:
 		var hairLengthsJson HairLengthsJson
 		query := `
