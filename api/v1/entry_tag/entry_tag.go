@@ -69,6 +69,84 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	defer db.Close()
 	switch r.Method {
 	case http.MethodGet:
+		var entryTagsJson EntryTagsJson
+		query := `
+			SELECT
+				id,
+				entry_id,
+				tag_id
+			FROM
+				entry_tag
+			WHERE
+				id IN (?)
+		`
+		// idが指定されていない場合は全件取得
+		queryIDs, ok := r.URL.Query()["id"]
+		if !ok {
+			query = `
+				SELECT
+					id,
+					entry_id,
+					tag_id
+				FROM
+					entry_tag
+			`
+			err := db.SelectContext(r.Context(), &entryTagsJson.EntryTags, query)
+			if err != nil {
+				log.Println(fmt.Sprintf("select error: %v", err))
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			// json返却
+			err = json.NewEncoder(w).Encode(&entryTagsJson)
+			if err != nil {
+				log.Println(fmt.Sprintf("json encode error: %v", err))
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			return
+		// idが指定されている場合は指定されたidのみ取得
+		} else if len(queryIDs) == 1 {
+			query = `
+				SELECT
+					id,
+					entry_id,
+					tag_id
+				FROM
+					entry_tag
+				WHERE
+					id = $1
+			`
+			err := db.SelectContext(r.Context(), &entryTagsJson.EntryTags, query, queryIDs[0])
+			if err != nil {
+				log.Println(fmt.Sprintf("select error: %v", err))
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			// json返却
+			err = json.NewEncoder(w).Encode(&entryTagsJson)
+			if err != nil {
+				log.Println(fmt.Sprintf("json encode error: %v", err))
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			return
+		}
+		// idの数だけ置換文字を作成
+		query, args, err := sqlx.In(query, queryIDs)
+		if err != nil {
+			log.Println(fmt.Sprintf("db.In error: %v", err))
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		// Postgresの場合は置換文字を$1, $2, ...とする必要がある
+		query = sqlx.Rebind(len(queryIDs), query)
+		err = db.SelectContext(r.Context(), &entryTagsJson.EntryTags, query, args...)
+		if err != nil {
+			log.Println(fmt.Sprintf("select error: %v", err))
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		// json返却
+		err = json.NewEncoder(w).Encode(&entryTagsJson)
+		if err != nil {
+			log.Println(fmt.Sprintf("json encode error: %v", err))
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 	case http.MethodPost:
 		var entryTagsJson EntryTagsJson
 		query := `
