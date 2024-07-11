@@ -164,6 +164,44 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "json encode error", http.StatusInternalServerError)
 		}
 	case http.MethodPut:
+		var hairLengthsJson HairLengthsJson
+		query := `
+			UPDATE
+				hairlength
+			SET
+				hairlength_type_id = :hairlength_type_id
+			WHERE
+				entry_id = :entry_id
+		`
+		// jsonをデコード
+		if err := json.NewDecoder(r.Body).Decode(&hairLengthsJson); err != nil {
+			log.Printf(fmt.Sprintf("json decode error: %v body:%v", err, r.Body))
+			http.Error(w, "json decode error", http.StatusBadRequest)
+		}
+		// jsonバリデーション
+		err := hairLengthsJson.Validate()
+		if err != nil {
+			log.Printf(fmt.Sprintf("validation error: %v", err))
+			http.Error(w, "validation error", http.StatusUnprocessableEntity)
+		}
+		for _, hl := range hairLengthsJson.HairLengths {
+			// jsonのバリデーションを通過したデータをDBに登録
+			err = hl.Validate()
+			if err != nil {
+				log.Printf(fmt.Sprintf("validation error: %v", err))
+				http.Error(w, "validation error", http.StatusUnprocessableEntity)
+			}
+			if _, err := db.NamedExecContext(r.Context(), query, hl); err != nil {
+				log.Printf(fmt.Sprintf("db error: %v", err))
+				http.Error(w, "db error", http.StatusInternalServerError)
+			}
+		}
+		// jsonを返す
+		err = json.NewEncoder(w).Encode(&hairLengthsJson)
+		if err != nil {
+			log.Printf(fmt.Sprintf("json encode error: %v", err))
+			http.Error(w, "json encode error", http.StatusInternalServerError)
+		}
 	case http.MethodDelete:
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
