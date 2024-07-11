@@ -10,6 +10,7 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
+	validation "github.com/go-ozzo/ozzo-validation"
 )
 
 type Entry struct {
@@ -21,8 +22,24 @@ type Entry struct {
 	CreatedAt time.Time `db:"created_at" json:"created_at"`
 }
 
+func (e *Entry) Validate() error {
+	return validation.ValidateStruct(e,
+		validation.Field(&e.SourceID, validation.Required),
+		validation.Field(&e.Name, validation.Required),
+		validation.Field(&e.Image, validation.Required),
+		validation.Field(&e.Content, validation.Required),
+		validation.Field(&e.CreatedAt, validation.Required),
+	)
+}
+
 type EntriesJson struct {
 	Entries []Entry `json:"entries"`
+}
+
+func (e *EntriesJson) Validate() error {
+	return validation.ValidateStruct(e,
+		validation.Field(&e.Entries, validation.Required),
+	)
 }
 
 type Source struct {
@@ -34,6 +51,12 @@ type Source struct {
 
 type IDs struct {
 	IDs []int64 `json:"ids"`
+}
+
+func (i *IDs) Validate() error {
+	return validation.ValidateStruct(i,
+		validation.Field(&i.IDs, validation.Required),
+	)
 }
 
 func Handler(w http.ResponseWriter, r *http.Request) {
