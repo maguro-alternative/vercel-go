@@ -1,0 +1,101 @@
+package personality
+
+import (
+	"encoding/json"
+	"log"
+	"fmt"
+	"net/http"
+
+	"github.com/jmoiron/sqlx"
+	_ "github.com/lib/pq"
+	validation "github.com/go-ozzo/ozzo-validation"
+)
+
+type Personality struct {
+	EntryID int64 `db:"entry_id"`
+	TypeID  int64 `db:"type_id"`
+}
+
+func (p *Personality) Validate() error {
+	return validation.ValidateStruct(p,
+		validation.Field(&p.EntryID, validation.Required),
+		validation.Field(&p.TypeID, validation.Required),
+	)
+}
+
+type PersonalitiesJson struct {
+	Personalities []Personality `json:"personalities"`
+}
+
+func (p *PersonalitiesJson) Validate() error {
+	return validation.ValidateStruct(p,
+		validation.Field(&p.Personalities, validation.Required),
+	)
+}
+
+type IDs struct {
+	IDs []int64 `json:"ids"`
+}
+
+func (i *IDs) Validate() error {
+	return validation.ValidateStruct(i,
+		validation.Field(&i.IDs, validation.Required),
+	)
+}
+
+func Handler(w http.ResponseWriter, r *http.Request) {
+	db, err := sqlx.Open("postgres", "")
+	if err != nil {
+		log.Printf("sql.Open error %s", err)
+	}
+	defer db.Close()
+	switch r.Method {
+	case http.MethodGet:
+	case http.MethodPost:
+		var personalitiesJson PersonalitiesJson
+		query := `
+			INSERT INTO personality (
+				entry_id,
+				type_id
+			) VALUES (
+				:entry_id,
+				:type_id
+			)
+		`
+		// json decode
+		err := json.NewDecoder(r.Body).Decode(&personalitiesJson)
+		if err != nil {
+			log.Printf(fmt.Sprintf("json decode error: %v body:%v", err, r.Body))
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		}
+		// validation
+		err = personalitiesJson.Validate()
+		if err != nil {
+			log.Printf(fmt.Sprintf("validation error: %v", err))
+			http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+		}
+		for _, personality := range personalitiesJson.Personalities {
+			// validation
+			err = personality.Validate()
+			if err != nil {
+				log.Printf(fmt.Sprintf("validation error: %v", err))
+				http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+			}
+			_, err = db.NamedExecContext(r.Context(), query, personality)
+			if err != nil {
+				log.Printf(fmt.Sprintf("insert error: %v", err))
+				http.Error(w, err.Error(), http.StatusBadRequest)
+			}
+		}
+		// json encode
+		err = json.NewEncoder(w).Encode(&personalitiesJson)
+		if err != nil {
+			log.Printf(fmt.Sprintf("json encode error: %v", err))
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		}
+	case http.MethodPut:
+	case http.MethodDelete:
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
