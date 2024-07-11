@@ -58,6 +58,88 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	defer db.Close()
 	switch r.Method {
 	case http.MethodGet:
+		var linksJson LinksJson
+		query := `
+			SELECT
+				entry_id,
+				type,
+				url,
+				nsfw,
+				darkness
+			FROM
+				link
+			WHERE
+				id IN (?)
+		`
+		queryIDs, ok := r.URL.Query()["id"]
+		if !ok {
+			query = `
+				SELECT
+					entry_id,
+					type,
+					url,
+					nsfw,
+					darkness
+				FROM
+					link
+			`
+			err := db.SelectContext(r.Context(), &linksJson.Links, query)
+			if err != nil {
+				log.Printf(fmt.Sprintf("db error: %v", err))
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			// レスポンスボディをJSONに変換
+			err = json.NewEncoder(w).Encode(&linksJson)
+			if err != nil {
+				log.Printf(fmt.Sprintf("json encode error: %v", err))
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			return
+		} else if len(queryIDs) == 1 {
+			query = `
+				SELECT
+					entry_id,
+					type,
+					url,
+					nsfw,
+					darkness
+				FROM
+					link
+				WHERE
+					id = $1
+			`
+			err := db.SelectContext(r.Context(), &linksJson.Links, query, queryIDs[0])
+			if err != nil {
+				log.Printf(fmt.Sprintf("select error: %v", err))
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			// レスポンスボディをJSONに変換
+			err = json.NewEncoder(w).Encode(&linksJson)
+			if err != nil {
+				log.Printf(fmt.Sprintf("json encode error: %v", err))
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			return
+		}
+		// idの数だけ置換文字を作成
+		query, args, err := sqlx.In(query, queryIDs)
+		if err != nil {
+			log.Printf(fmt.Sprintf("in query error: %v", err))
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		// Postgresの場合は置換文字を$1, $2, ...とする必要がある
+		query = sqlx.Rebind(len(queryIDs), query)
+		err = db.SelectContext(r.Context(), &linksJson.Links, query, args...)
+		if err != nil {
+			log.Printf(fmt.Sprintf("select error: %v", err))
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		// レスポンスボディをJSONに変換
+		err = json.NewEncoder(w).Encode(&linksJson)
+		if err != nil {
+			log.Printf(fmt.Sprintf("json encode error: %v", err))
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 	case http.MethodPost:
 		var linksJson LinksJson
 		query := `
