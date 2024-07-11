@@ -203,6 +203,62 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	case http.MethodDelete:
+		var delIDs IDs
+		if err := json.NewDecoder(r.Body).Decode(&delIDs); err != nil {
+			log.Printf(fmt.Sprintf("json decode error: %v body:%v", err, r.Body))
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		}
+		query := `
+			DELETE FROM
+				haircolor
+			WHERE
+				entry_id IN (?)
+		`
+		// jsonバリデーション
+		err := delIDs.Validate()
+		if err != nil {
+			log.Printf(fmt.Sprintf("validation error: %v", err))
+			http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+		}
+		if len(delIDs.IDs) == 0 {
+			return
+		} else if len(delIDs.IDs) == 1 {
+			query = `
+				DELETE FROM
+					haircolor
+				WHERE
+					entry_id = $1
+			`
+			if _, err := db.ExecContext(r.Context(), query, delIDs.IDs[0]); err != nil {
+				log.Printf(fmt.Sprintf("db error: %v", err))
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			// json書き込み
+			err = json.NewEncoder(w).Encode(&delIDs)
+			if err != nil {
+				log.Printf(fmt.Sprintf("json encode error: %v", err))
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			return
+		}
+		// idの数だけ置換文字を作成
+		query, args, err := sqlx.In(query, delIDs.IDs)
+		if err != nil {
+			log.Printf(fmt.Sprintf("db error: %v", err))
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		// Postgresの場合は置換文字を$1, $2, ...とする必要がある
+		query = sqlx.Rebind(len(delIDs.IDs), query)
+		if _, err := db.ExecContext(r.Context(), query, args...); err != nil {
+			log.Printf(fmt.Sprintf("db error: %v", err))
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		// json書き込み
+		err = json.NewEncoder(w).Encode(&delIDs)
+		if err != nil {
+			log.Printf(fmt.Sprintf("json encode error: %v", err))
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
