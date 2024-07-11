@@ -185,6 +185,51 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	case http.MethodPut:
+		var hekiRadarChartsJson HekiRadarChartsJson
+		query := `
+			UPDATE
+				heki_radar_chart
+			SET
+				ai = :ai,
+				nu = :nu
+			WHERE
+				entry_id = :entry_id
+		`
+		err := json.NewDecoder(r.Body).Decode(&hekiRadarChartsJson)
+		if err != nil {
+			log.Println(fmt.Sprintf("json decode error: %v body:%v", err, r.Body))
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		// jsonバリデーション
+		err = hekiRadarChartsJson.Validate()
+		if err != nil {
+			log.Println(fmt.Sprintf("json validate error: %v", err))
+			http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+			return
+		}
+		for _, hrc := range hekiRadarChartsJson.HekiRadarCharts {
+			// jsonバリデーション
+			err = hrc.Validate()
+			if err != nil {
+				log.Println(fmt.Sprintf("json validate error: %v", err))
+				http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+				return
+			}
+			_, err := db.NamedExecContext(r.Context(), query, hrc)
+			if err != nil {
+				log.Println(fmt.Sprintf("db error: %v", err))
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
+		// json書き込み
+		err = json.NewEncoder(w).Encode(&hekiRadarChartsJson)
+		if err != nil {
+			log.Println(fmt.Sprintf("json encode error: %v", err))
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	case http.MethodDelete:
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
