@@ -52,6 +52,79 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	defer db.Close()
 	switch r.Method {
 	case http.MethodGet:
+		var eyeColorsJson EyeColorsJson
+		query := `
+			SELECT
+				entry_id,
+				color_id
+			FROM
+				eyecolor
+			WHERE
+				entry_id IN (?)
+		`
+		queryIDs, ok := r.URL.Query()["entry_id"]
+		if !ok {
+			query = `
+				SELECT
+					entry_id,
+					color_id
+				FROM
+					eyecolor
+			`
+			err := db.SelectContext(r.Context(), &eyeColorsJson.EyeColors, query)
+			if err != nil {
+				log.Printf(fmt.Sprintf("db error: %v", err))
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			// json返却
+			err = json.NewEncoder(w).Encode(&eyeColorsJson)
+			if err != nil {
+				log.Printf(fmt.Sprintf("json encode error: %v", err))
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			return
+		} else if len(queryIDs) == 1 {
+			query = `
+				SELECT
+					entry_id,
+					color_id
+				FROM
+					eyecolor
+				WHERE
+					entry_id = $1
+			`
+			err := db.SelectContext(r.Context(), &eyeColorsJson.EyeColors, query, queryIDs[0])
+			if err != nil {
+				log.Printf(fmt.Sprintf("db error: %v", err))
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			// json返却
+			err = json.NewEncoder(w).Encode(&eyeColorsJson)
+			if err != nil {
+				log.Printf(fmt.Sprintf("json encode error: %v", err))
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			return
+		}
+		// entry_idの数だけ置換文字を作成
+		query, args, err := sqlx.In(query, queryIDs)
+		if err != nil {
+			log.Printf(fmt.Sprintf("db error: %v", err))
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		// Postgresの場合は置換文字を$1, $2, ...とする必要がある
+		query = sqlx.Rebind(len(queryIDs), query)
+		err = db.SelectContext(r.Context(), &eyeColorsJson.EyeColors, query, args...)
+		if err != nil {
+			log.Printf(fmt.Sprintf("db error: %v", err))
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		// json返却
+		err = json.NewEncoder(w).Encode(&eyeColorsJson)
+		if err != nil {
+			log.Printf(fmt.Sprintf("json encode error: %v", err))
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 	case http.MethodPost:
 		var eyeColorsJson EyeColorsJson
 		query := `
