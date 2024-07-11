@@ -50,6 +50,86 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	defer db.Close()
 	switch r.Method {
 	case http.MethodGet:
+		var personalityTypesJson PersonalityTypesJson
+		query := `
+			SELECT
+				id,
+				type
+			FROM
+				personality_type
+			WHERE
+				id IN (?)
+		`
+		queryIDs, ok := r.URL.Query()["id"]
+		if !ok {
+			query = `
+				SELECT
+					id,
+					type
+				FROM
+					personality_type
+			`
+			err := db.SelectContext(r.Context(), &personalityTypesJson.PersonalityTypes, query)
+			if err != nil {
+				log.Printf(fmt.Sprintf("db error: %v", err))
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			// jsonを返す
+			err = json.NewEncoder(w).Encode(&personalityTypesJson)
+			if err != nil {
+				log.Printf(fmt.Sprintf("json encode error: %v", err))
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			return
+		} else if len(queryIDs) == 1 {
+			query = `
+				SELECT
+					id,
+					type
+				FROM
+					personality_type
+				WHERE
+					id = $1
+			`
+			err := db.SelectContext(r.Context(), &personalityTypesJson.PersonalityTypes, query, queryIDs[0])
+			if err != nil {
+				log.Printf(fmt.Sprintf("db error: %v", err))
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			// jsonを返す
+			err = json.NewEncoder(w).Encode(&personalityTypesJson)
+			if err != nil {
+				log.Printf(fmt.Sprintf("json encode error: %v", err))
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			return
+		}
+		// idの数だけ置換文字を作成
+		query, args, err := sqlx.In(query, queryIDs)
+		if err != nil {
+			log.Printf(fmt.Sprintf("db error: %v", err))
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		// Postgresの場合は置換文字を$1, $2, ...とする必要がある
+		query = sqlx.Rebind(len(queryIDs), query)
+		err = db.SelectContext(r.Context(), &personalityTypesJson.PersonalityTypes, query, args...)
+		if err != nil {
+			log.Printf(fmt.Sprintf("db error: %v", err))
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		// jsonを返す
+		err = json.NewEncoder(w).Encode(&personalityTypesJson)
+		if err != nil {
+			log.Printf(fmt.Sprintf("json encode error: %v", err))
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	case http.MethodPost:
 		var personalityTypesJson PersonalityTypesJson
 		query := `
