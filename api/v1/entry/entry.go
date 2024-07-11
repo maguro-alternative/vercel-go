@@ -44,6 +44,93 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	defer db.Close()
 	switch r.Method {
 	case http.MethodGet:
+		var entriesJson EntriesJson
+		query := `
+			SELECT
+				source_id,
+				name,
+				image,
+				content,
+				created_at
+			FROM
+				entry
+			WHERE
+				id IN (?)
+		`
+		// クエリパラメータからidを取得
+		queryIDs, ok := r.URL.Query()["id"]
+		// idが指定されていない場合は全件取得
+		if !ok {
+			query = `
+				SELECT
+					source_id,
+					name,
+					image,
+					content,
+					created_at
+				FROM
+					entry
+			`
+			// 全件取得
+			err := db.SelectContext(r.Context(), &entriesJson.Entries, query)
+			if err != nil {
+				log.Println(fmt.Sprintf("select error: %v", err))
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			// レスポンスボディに書き込む
+			err = json.NewEncoder(w).Encode(&entriesJson)
+			if err != nil {
+				log.Println(fmt.Sprintf("json encode error: %v", err))
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			return
+		} else if len(queryIDs) == 1 {
+			query = `
+				SELECT
+					source_id,
+					name,
+					image,
+					content,
+					created_at
+				FROM
+					entry
+				WHERE
+					id = $1
+			`
+			// 1件取得
+			err := db.SelectContext(r.Context(), &entriesJson.Entries, query, queryIDs[0])
+			if err != nil {
+				log.Println(fmt.Sprintf("select error: %v", err))
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			// レスポンスボディに書き込む
+			err = json.NewEncoder(w).Encode(&entriesJson)
+			if err != nil {
+				log.Println(fmt.Sprintf("json encode error: %v", err))
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			return
+		}
+		// idの数だけ置換文字を作成
+		query, args, err := sqlx.In(query, queryIDs)
+		if err != nil {
+			log.Println(fmt.Sprintf("db.In error: %v", err))
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		// Postgresの場合は置換文字を$1, $2, ...とする必要がある
+		query = sqlx.Rebind(len(queryIDs), query)
+		// 複数件取得
+		err = db.SelectContext(r.Context(), &entriesJson.Entries, query, args...)
+		if err != nil {
+			log.Println(fmt.Sprintf("select error: %v", err))
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		// レスポンスボディに書き込む
+		err = json.NewEncoder(w).Encode(&entriesJson)
+		if err != nil {
+			log.Println(fmt.Sprintf("json encode error: %v", err))
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 	case http.MethodPost:
 		var entriesJson EntriesJson
 		query := `
