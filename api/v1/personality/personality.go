@@ -94,6 +94,79 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 		}
 	case http.MethodPut:
+		var personalitiesJson PersonalitiesJson
+		query := `
+			SELECT
+				entry_id,
+				type_id
+			FROM
+				personality
+			WHERE
+				entry_id IN (?)
+		`
+		queryIDs, ok := r.URL.Query()["entry_id"]
+		if !ok {
+			query = `
+				SELECT
+					entry_id,
+					type_id
+				FROM
+					personality
+			`
+			err := db.SelectContext(r.Context(), &personalitiesJson.Personalities, query)
+			if err != nil {
+				log.Printf(fmt.Sprintf("select error: %v", err))
+				http.Error(w, err.Error(), http.StatusBadRequest)
+			}
+			// json encode
+			err = json.NewEncoder(w).Encode(&personalitiesJson)
+			if err != nil {
+				log.Printf(fmt.Sprintf("json encode error: %v", err))
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			return
+		} else if len(queryIDs) == 1 {
+			query = `
+				SELECT
+					entry_id,
+					type_id
+				FROM
+					personality
+				WHERE
+					entry_id = $1
+			`
+			err := db.SelectContext(r.Context(), &personalitiesJson.Personalities, query, queryIDs[0])
+			if err != nil {
+				log.Printf(fmt.Sprintf("select error: %v", err))
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			// json encode
+			err = json.NewEncoder(w).Encode(&personalitiesJson)
+			if err != nil {
+				log.Printf(fmt.Sprintf("json encode error: %v", err))
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			return
+		}
+		// idの数だけ置換文字を作成
+		query, args, err := sqlx.In(query, queryIDs)
+		if err != nil {
+			log.Printf(fmt.Sprintf("in query error: %v", err))
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		// Postgresの場合は置換文字を$1, $2, ...とする必要がある
+		query = sqlx.Rebind(len(queryIDs), query)
+		err = db.SelectContext(r.Context(), &personalitiesJson.Personalities, query, args...)
+		if err != nil {
+			log.Printf(fmt.Sprintf("select error: %v", err))
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		// json encode
+		err = json.NewEncoder(w).Encode(&personalitiesJson)
+		if err != nil {
+			log.Printf(fmt.Sprintf("json encode error: %v", err))
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 	case http.MethodDelete:
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
